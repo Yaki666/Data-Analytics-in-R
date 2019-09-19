@@ -1,0 +1,262 @@
+---
+title: "HW1"
+author: "Yaqi Li"
+date: "3/30/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+library(ggplot2)
+library(ggmap)
+library(tidyverse)
+library(GGally)
+library(gridExtra)
+```
+
+##Q1.1
+```{r}
+hsb2 = read.csv(file = 'hsb2.csv',header = TRUE, sep = ',')
+str(hsb2)
+meanscore = rowMeans(hsb2[,7:11])
+hsb2$meanscore = meanscore 
+```
+
+##Q1.2
+```{r}
+hsb2$meanscore[hsb2$meanscore == 99] = NA
+hsb2 = within(hsb2,{
+              meancat = NA
+              meancat[meanscore <45] = 'Low'
+              meancat[meanscore >45 & meanscore <60] = 'Middle'
+              meancat[meanscore >60 ] = 'High'
+  
+})
+```
+
+##Q1.3
+```{r}
+newdata = hsb2[order(hsb2$meanscore,decreasing = TRUE),]
+sum(is.na(newdata))
+```
+##Q1.4
+```{r}
+newdata2 = na.omit(newdata)
+sum(is.na(newdata2))
+```
+##Q1.5
+```{r}
+index = c('read','write',"math","science","socst","meanscore","meancat")
+newdata3 = newdata2[index]
+str(newdata3)
+```
+
+##Q2.1
+```{r}
+den = ggplot(hsb2, aes(x=meanscore)) + geom_density() + facet_grid(~prog) +xlab('meanscore') +ylab('density')
+den
+```
+ 
+## Q2.2
+```{r}
+newdata2$prog = as.factor(newdata2$prog)
+ggplot(newdata2, aes(x=prog, y = meanscore)) + geom_boxplot() +xlab("factor(prog)")
+```
+##Q2.3
+```{r}
+ta = table(newdata2$meancat)
+ta
+sum(ta)
+```
+The total is 197 because three NA are deleted from the dataset. 
+
+##Q2.4
+```{r}
+
+ggpairs(newdata2[,7:12])
+```
+ 
+ 
+##Q3.1
+```{r}
+airbnb = read.csv(file = 'NOLAlistingsJune2016.csv',header = TRUE, sep = ",")
+summary(airbnb$price)
+```
+The histogram of the price would be skewd to left very much and has very long right tail. 
+##Q3.2
+```{r}
+ggplot(airbnb,aes(airbnb$price)) + geom_histogram(bins = 10)
+```
+The result of the visualization is not useful because the data is highly left skewed and the granularity of the important part of the data is too coarse. 
+##Q3.3
+```{r}
+ggplot(airbnb,aes(airbnb$price)) + geom_histogram(bins = 100)
+```
+The result is much better than the previous one. 
+##Q3.4
+```{r}
+priceBelow1K = subset(airbnb,price <1000)
+ggplot(priceBelow1K,aes(priceBelow1K$price)) + geom_histogram(bins = 20)
+
+```
+##Q3.5
+```{r}
+
+ggplot(airbnb,aes(x=airbnb$longitude,y=airbnb$latitude))+geom_point()+xlab("longititude")+ylab("latitude")
+```
+##3.6 
+There seems to be several outliers on the right top of the chart 
+```{r}
+airbnbLocation = subset(airbnb,longitude<=-89.8)
+ggplot(airbnbLocation,aes(x=airbnbLocation$longitude,y=airbnbLocation$latitude))+geom_point()
+```
+##Q3.7
+```{r}
+
+NewOrleans= get_map(location = 'new orleans')
+ggmap(NewOrleans) + geom_point(data = airbnb, aes(x= longitude, y = latitude), size = 0.5, color = "red") + theme(line = element_blank(), text = element_blank(),title = element_blank())
+
+```
+
+##Q4
+```{r}
+df <- data.frame(activity = c("Writing", "Making the Margins Really Small", "Making a Cover Page", "Inserting huge quote boxes", "Skimming your research", "Crying Because You're Going to Fail", "Facebook"), minutes = c(30, 15, 20, 30, 60, 120, 720))
+
+bp <- ggplot(df, aes(x="", y=minutes, fill=activity)) + geom_bar(width = 1, stat = "identity") + ggtitle("Use of time before deadline for important essay") 
+
+bp 
+
+pie <- bp + coord_polar("y", start=0) 
+
+pie
+```
+Use ```scale_fill_brewer``` to adjust colore scheme of the plot 
+```{r}
+bp +  scale_fill_brewer(palette="BuGn")
+pie + scale_fill_brewer(palette = "Dark2")
+```
+##Q5
+Imagine you work for a company which, for a current project, needs to analyze a shipment of diamonds which was recently delivered. Now imaging you are charged with the task of delivering a brief presentation to your team describing the diamond delivery. How do some variables change with others? What are the best visual ways to express the structure of this data? (Maybe a bar graph, maybe a density plot?) Use the ggplot package to generate a few plots to help you describe the new diamond delivery to your team.
+
+```{r}
+data(diamonds) 
+attach(diamonds) 
+str(diamonds)
+```
+There are three factor variables in the dataset, which are cut, color, and clarity. Price and carat are continuous variables. x, y, z are number variables and depth variable is deduced from the three. First of all, we inspect whether there are any missing values in the dataset. 
+```{r}
+sum(is.na(diamonds))
+```
+There are no missing values in the dataset.
+
+Let's first take a look at the distribution of prices of these pricey carbon stones.
+```{r}
+ ggplot(diamonds, aes(x= price))  + geom_histogram(binwidth = 100)
+```
+Looks just like the distribution of the wealth of the society! Most people can just afford a small diamond while there are always rich people who can afford high priced diamonds. One thing worth noting is the huge blank strip on the left. Let's take a closer look at that area to find out what's going on. 
+
+```{r}
+ggplot(diamonds, aes(x= price))  + geom_histogram(binwidth = 10) + xlim(c(1,2000))
+```
+Lots of price data have gone missing around 1500. This looks like someone intentionally   deletes the chunk of data around 1500.  
+
+Next, we want to check the relationship between carat and price, which should show a positive correlation. Bigger the diamond, more money for it!
+```{r}
+ggplot(diamonds,aes(x = carat,y = price)) + geom_point() + geom_smooth(method = "lm") + ylim(0,21000)
+
+```
+The graph shows clearly the positive relationship between carat and price. But the relationship is not a simple linear relationship. Firstly, there are much fewer diamonds heavier than 3 carats. Secondly, it appears that more diamonds are concentrated around certain carats such as 1,1.5, and 2. We can plot the histogram of the weight variable. 
+
+```{r}
+ggplot(diamonds, aes(x = carat)) + geom_histogram(binwidth = 0.1 ) + scale_x_continuous( breaks = seq (0,5,by = 0.2)) + theme(axis.text.x = element_text(angle = 15, hjust = 1, size = 7))
+```
+The histogram shows the same pattern we have observed from the last plot. Let's take a more detailed look at diamonds whose weights are less than 3 carats.
+
+```{r}
+ggplot(diamonds %>% filter(carat<3), aes(x = carat)) + geom_histogram(binwidth = 0.01 ) + scale_x_continuous( breaks = seq (0,5,by = 0.1)) + theme(axis.text.x = element_text(angle = 15, hjust = 1, size = 7))
+
+```
+Apparently, people like diamonds of 0.3,0.4,0.5,0.7,0.9 carat levels of diamond. In each cluster, it shows the declining trend until reaching the next peak. When the diamond becomes bigger, people favor diamonds weighing 1, 1.2, 1.5, then 2 carats. 
+
+Then we can take a look at how different criterias of diamonds(cut, color, and clarity) are distributed. 
+```{r}
+
+g1= ggplot(data = diamonds, aes(x=cut)) + geom_bar()
+g2=ggplot(data = diamonds, aes(x=color)) + geom_bar()
+g3= ggplot(data = diamonds, aes(x=clarity)) + geom_bar()
+grid.arrange(g1,g2,g3,ncol=2)
+```
+Most diamonds are cutted in an ideal condition and the colors. Next, we are interested in how the price of diamonds are affected by these criteria.
+```{r}
+ggplot(diamonds, aes(x= price, color = color))  + geom_density() + scale_fill_brewer(palette = "Dark2") + facet_wrap(~ clarity)
+```
+Each subplot is the price density distribution of different clarities while different colors mean different color gradings of diamonds. One thing peculiar here is the top color class diamonds density are accumulated in a relatively low price range, because the carat of a diamond is a very important factor. There are generally more small diamonds so this density plot may cause confusion about the dataset and we need another visualization of how these criterias affect the price given the same weight.
+
+```{r}
+ggplot(diamonds,aes(x = carat,y = price, color = cut)) + geom_point(alpha=0.2) 
+ggplot(diamonds,aes(x = carat,y = price, color = clarity)) + geom_point(alpha=0.2) 
+ggplot(diamonds,aes(x = carat,y = price, color = color)) + geom_point(alpha=0.2) 
+```
+From the first plot, we do see **fair** cut diamonds generally have lower price compared to other cutting levels but other cutting conditions are mingled together, which means bad cutting would affect the price badly while good cutting does not necessarily bump up the price. Clarity seems to be an important factor of the price because we can see apparent level separation from the second plot. Also, as color level improces from D to J, the price decreases. Actually, diamond color is [the second most important factor](https://www.bluenile.com/education/diamonds/color) and D means the best color level.
+
+```{r}
+ggplot(diamonds %>% filter(carat < 3), aes(x= carat, y = price, colour = color))  + geom_point(alpha = 0.3, size = 0.4) + scale_fill_brewer(palette = "Dark2") + facet_wrap(~ clarity)
+```
+This plot shows the effect of color and clarity on the price. As clarity becomes better, the slope of data points increases, which suggests positive relationship. Also, the darker points in each subplot, which indicates better color quality of diamonds, generally have higher price compared to others.
+
+Now, we can take a look at the x,y,z parameter of a diamond and how they are related with each other. Still, first we can inspect the distribution of x variable.
+```{r}
+ggplot(diamonds, aes(x = x)) + 
+  geom_histogram(binwidth = 0.5)
+```
+There are too many observations in the common bins but we notice there is something unusual on the position 0. We can zoom closer to see those smaller value on the y-axis around 0 on the x-axis with ``` coord_cartesian()```
+```{r}
+ggplot(diamonds, aes(x = x)) + 
+  geom_histogram(binwidth = 0.5) + coord_cartesian(ylim= c(0,50))
+```
+Let's take a look at those abnormal data with x=0.
+
+```{r}
+diamonds %>% 
+  filter(x==0) %>% 
+  select(price,x,y,z)
+  
+```
+It is apparent diamonds cannot have 0 width. It is likely these data points have missing values of variable x,y,and z and some people substitube them with 0s. Let's take a look at the relationship between the x and y.
+```{r}
+ggplot(diamonds,aes(x=x,y=y)) + geom_point() +  geom_smooth(method = "lm")
+```
+It turns out they have highly linear correlation while we can see the outliers with x=0 and y=0 and those with very high y value. If we want to do further analysis, we would want to get rid of those outliers first. 
+
+Finally let's take a look at the relationship between x,y, and z.
+
+```{r}
+ggpairs(diamonds %>% select(x,y,z))
+```
+From the pair graph, we can see x,y,z are very correlated with each other.
+```{r}
+library(scatterplot3d)
+scatterplot3d(diamonds %>% select('x','y','z'), pch = 16, color="steelblue")
+```
+In the 3D space, besides the outliers, it is a perfect straight line. This makes sense because the cut of a diamond has to be subjected to certain rules of proportion. 
+
+Finally, let's inspect the table and depth variable.
+```{r}
+ggplot(diamonds %>% filter (table<68 & table>50) ,aes(x=table)) + geom_histogram(binwidth = 0.1) +  scale_x_continuous( breaks = seq (50,75,by = 1)) + theme(axis.text.x = element_text(angle = 15, hjust = 1, size = 7))
+```
+
+```{r}
+ggplot(diamonds,aes(x=depth)) + geom_histogram(binwidth = 0.1)
+```
+The table variable is apparently a categorical value rather than a continuous one. We should pay attention to this in our further analysis. 
+
+
+

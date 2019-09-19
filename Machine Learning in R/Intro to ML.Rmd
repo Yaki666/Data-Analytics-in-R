@@ -1,0 +1,203 @@
+---
+title: "HW4 ML"
+author: "Yaqi"
+date: "5/8/2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+library(tidyverse)
+library(caret)
+library(gmodels)
+library(MLmetrics)
+library(C50)
+```
+
+1. Credit Analysis using machine learning
+Load dataset credit.csv first and split the data into training and validation part.
+
+```{r}
+credit = read_csv('credit.csv')
+credit = data.frame(credit)
+```
+Recode 1,2 in default to “no” and “yes” respectively and split the data.
+```{r}
+credit = credit %>% 
+  mutate(default = if_else(default==1,'No','Yes'))
+credit$default = as.factor(credit$default)
+# change character variables into levels
+credit[,c("checking_balance","credit_history","purpose","savings_balance","employment_length","personal_status","other_debtors","property","installment_plan","housing","job","telephone","foreign_worker")] = lapply(credit[,c("checking_balance","credit_history","purpose","savings_balance","employment_length","personal_status","other_debtors","property","installment_plan","housing","job","telephone","foreign_worker")],factor)
+# create a list of 80% of the rows in the original dataset we can use for training
+validation_index <- createDataPartition(credit$default, p=0.80, list=FALSE)
+# select 20% of the data for validation
+credit_valid <- credit[-validation_index,]
+# use the remaining 80% of data to training and testing the models
+credit_train <-credit[validation_index,]
+
+
+print("Number of rows in our training dataset:")
+dim(credit_train)[1]
+print("Number of features in our training dataset:")
+dim(credit_train)[2]-1
+```
+```{r}
+# Inspect the class of all the variables 
+sapply(credit_train, class)
+```
+
+Now we can fit a decision tree model to predict the default 
+```{r}
+tree_mod <- C5.0(x = credit_train[,-21], y = as.factor(credit_train$default))
+plot(tree_mod)
+```
+```{r}
+credit_pred = predict(tree_mod,newdata = credit_valid)
+CrossTable(credit_valid$default, credit_pred,
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c('actual default', 'predicted default'))
+
+F1_Score(credit_valid$default, credit_pred)
+```
+The decision tree model using all the variables as predictors we have a F1 Score of 78.2%, which is pretty good. Let's try the boosting decision tree now.
+
+```{r}
+tree_boost <- C5.0(x = credit_train[,-21], y = as.factor(credit_train$default),trials = 100)
+credit_pred_boost = predict(tree_boost,newdata = credit_valid)
+CrossTable(credit_valid$default, credit_pred_boost,
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c('actual default', 'predicted default'))
+
+F1_Score(credit_valid$default, credit_pred_boost)
+```
+With the boosting method, we can improve the accuracy to 84.14%
+```{r}
+tree_boost <- C5.0(x = credit_train[,-21], y = as.factor(credit_train$default),trials = 100,rules = TRUE)
+credit_pred_boost = predict(tree_boost,newdata = credit_valid)
+CrossTable(credit_valid$default, credit_pred_boost,
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c('actual default', 'predicted default'))
+
+F1_Score(credit_valid$default, credit_pred_boost)
+```
+The boosting rule-based model works even better with 85.43% F1 Score.
+
+The different types of misclassification cause different costs to the company. Now we should take the cost of default and missed opportunity into consideration. Assume that loan default costs the bank four times as much as a missed opportunity and we can rerun our decision tree model.
+
+```{r}
+cost_mat <- matrix(c(0, 4, 1, 0), nrow = 2)
+rownames(cost_mat) <- colnames(cost_mat) <- c("Yes", "No")
+cost_mat
+```
+```{r}
+tree_cost <- C5.0(x = credit_train[,-21], y = as.factor(credit_train$default), costs = cost_mat)
+credit_pred_cost = predict(tree_cost,newdata = credit_valid)
+CrossTable(credit_valid$default, credit_pred_cost,
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE, dnn = c('actual default', 'predicted default'))
+
+F1_Score(credit_valid$default, credit_pred_cost)
+```
+TWhen we add the cost matrix into the model, the average accuracy decreases while the false positive rate decreases from 0.18 to 0.07 because we penalize false positive more than false negative. 
+
+
+2.1 Another ML model
+
+```{r}
+library(caret)
+# attach the iris dataset to the environment
+data(iris)
+# lets call our data 'df'
+df_iris <- iris
+
+validation_index <- createDataPartition(df_iris$Species, p=0.80, list=FALSE)
+# select 20% of the data for validation
+df_valid <- df_iris[-validation_index,]
+# use the remaining 80% of data to training and testing the models
+df <- df_iris[validation_index,]
+
+# split features and labels
+X <- df[,1:4]
+y <- df[,5]
+
+control <- trainControl(method="cv", number=10)
+metric <- "Accuracy"
+
+set.seed(7)
+fit.ada <- train(Species~., data=df, method="treebag", metric=metric, trControl=control)
+
+predictions <- predict(fit.ada, df_valid) 
+confusionMatrix(predictions, df_valid$Species)
+```
+As we can see, the accuracy of the model bagged tree is 86.67%
+
+2.2 Hyperparameter Optimization
+
+```{r}
+library(randomForest)
+library(mlbench)
+library(caret)
+
+# Load Dataset
+data(Sonar)
+dataset <- Sonar
+x <- dataset[,1:60]
+y <- dataset[,61]
+# summarize the balance of the target
+table(dataset$Class)
+```
+The data is not very skewed. Now we can set a set of parameters before running our model.
+
+```{r}
+# Create model with default paramters
+control <- trainControl(method="repeatedcv", number=10, repeats=1)
+seed <- 7
+metric <- "Accuracy"
+set.seed(seed)
+mtry <- sqrt(ncol(x))
+
+# We use the expand.grid function, but we pass a scalar value 
+# as an argument so that our model is only trained on a 
+# single value for mtry = 7.746
+tunegrid <- expand.grid(.mtry=mtry)
+# train using the values of mtry stored above in tunegrid 
+rf <- train(Class~., data=dataset, 
+                    method="rf", 
+                    metric=metric, 
+                    tuneGrid=tunegrid, 
+                    trControl=control)
+# And lets look at the results
+print(rf)
+
+# Manual Search
+control <- trainControl(method="repeatedcv", number=10, repeats=1, search="grid")
+
+#stores trained models with different parameters
+modellist <- list()
+
+for (ntree in c(2, 5, 10, 15, 25, 50, 100, 500)) {
+  set.seed(seed)
+  fit <- train(Class~., data=dataset, 
+               method="rf", 
+               metric=metric, 
+               trControl=control, 
+               ntree=ntree)
+  key <- toString(ntree)
+  #save the fitted model in model list by naming 
+  modellist[[key]] <- fit
+}
+
+# compare results
+results <- resamples(modellist)
+summary(results)
+dotplot(results)
+```
