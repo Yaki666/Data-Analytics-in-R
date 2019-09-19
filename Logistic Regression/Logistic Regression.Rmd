@@ -1,0 +1,221 @@
+---
+title: "HW3"
+author: "Yaqi Li"
+date: "4/22/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(caret)
+library(tidyverse)
+```
+
+##1. NBA predictions revisited
+```{r}
+nba = read.csv('nbaspread.csv')
+attach(nba)
+str(nba)
+```
+We can fit the logistic regression model with several different variables and compare their AICs to choose the best combination.
+```{r}
+nbaLr1 = glm(favwin ~ favscr, family = binomial, data = nba)
+AIC(nbaLr1)
+```
+
+```{r}
+nbaLr2 = glm(favwin ~ spread-1, family = binomial, data = nba)
+AIC(nbaLr2)
+```
+
+```{r}
+nbaLr3 = glm(favwin ~ favhome , family = binomial, data = nba)
+AIC(nbaLr3)
+```
+
+```{r}
+nbaLr4 = glm(favwin ~ fregion , family = binomial, data = nba)
+AIC(nbaLr4)
+```
+```{r}
+nbaLrAll = glm(favwin ~ . - undscr , family = binomial, data = nba)
+AIC(nbaLrAll)
+```
+The result shows `favscore` has the most predictive power as a single variable. The best logistic regression model is the one incorporates all the variables but `undscr`. Be noticed that the favwin is deducted directly from `favhome`-`undscr` so we cannot have both variables in the model simultaneously。
+
+```{r}
+nbaLr = glm(favwin ~ favhome + favscr + spread + fregion , family = binomial, data = nba)
+AIC(nbaLr)
+```
+It is more accurate when we incorporate all those variables to predict the outcome. 
+
+```{r}
+
+nbaTrain <- createDataPartition(nba$favwin, p=0.6, list=FALSE) 
+nbatraining <- nba[nbaTrain, ]
+nbatesting <- nba[-nbaTrain, ]
+nbaLogistic = glm(favwin ~ favhome + favscr + spread + fregion , family = binomial, data = nbatraining)
+nbatesting$model_prob <- predict(nbaLogistic, nbatesting, type = "response")
+nbatesting = nbatesting %>% 
+  mutate(model_pred = 1*(model_prob > .53) + 0)
+nbatesting <- nbatesting %>% mutate(accurate = 1*(model_pred == favwin))
+sum(nbatesting$accurate)/nrow(nbatesting)
+```
+The accuracy of the logistic regression incorporating variables `favhome,favscr, spread, fregion` is 80%.
+##2. Graduate school admissions
+
+```{r}
+adm = read.csv('admissions.csv')
+str(adm)
+```
+We have a dependant binary variable `admit` indicating admitted or not. `gre` and `gpa` are continuous predictors and `rank` is a categorical variable taking on values through 1 to 4. 4 means the lowest prestigious rank.
+
+```{r}
+hist(adm$gre)
+mean(adm$gre)
+sd(adm$gre)
+```
+Variable `Gre` has a mean of 587.7 with a standard deviation of 115.5.
+
+```{r}
+hist(adm$gpa)
+mean(adm$gpa)
+sd(adm$gpa)
+```
+Variable `gpa` has a mean of 3.39 with a standard deviation of 0.38.
+Both distribution of `gre` and `gpa` are right-skewed.
+Lets now take a look at the relationship between the two categorical values. 
+
+```{r}
+xtabs(~admit+rank,data = adm)
+```
+This shows us the number of observations in 8 possible scenarios. Now we can predict the admission with these variables. But first we need to transform `rank` into factor.
+```{r}
+adm$rank = as.factor(adm$rank)
+str(adm)
+```
+Now we can fit a logistic regression model with `glm`.
+```{r}
+admLR = glm(admit ~ gre + gpa + rank , family = binomial, data = adm)
+summary(admLR)
+```
+`gre`,`gpa`, and level 2,3, and 4 of `rank` are significant predictors. The coefficient of `rank3` means if the student comes from a university ranked 3rd, the *negative* coefficient would decrease his/her probability of getting admitted.
+
+We can also transform the rank into an ordered factor.
+```{r}
+adm$rank = as.ordered(adm$rank)
+admLR2 = glm(admit ~ gre + gpa + rank , family = binomial, data = adm)
+summary(admLR2)
+```
+
+The AIC are the same for both models however the model treats rank as a combination of linear, quadratic, and cubic formulas and only the first order of rank has shown significant predictive ability in the logistic model. 
+
+Now we can calculate the 95% confidence interval for each variable.
+```{r}
+confint(admLR,level = 0.95)
+```
+
+Now we can predict the different admission probability by changing rank while holding gre and gpa at their mean value.
+
+```{r}
+predict(admLR, data.frame(gre = 587, gpa = 3.39 , rank = factor(1)), type = "response")
+predict(admLR, data.frame(gre = 587, gpa = 3.39 , rank = factor(2)), type = "response")
+predict(admLR, data.frame(gre = 587, gpa = 3.39 , rank = factor(3)), type = "response")
+predict(admLR, data.frame(gre = 587, gpa = 3.39 , rank = factor(4)), type = "response")
+```
+As expected, the probability of getting admitted decreases as the rank increases, which means less prestigious university background.
+ 
+We can also calculate the probability directly from the definition of the logistic function.
+
+```{r}
+logistic = function(x){
+  res = exp(x)/(1+exp(x))
+  return(res)
+}
+# Predict the probability of admission by assigning the sum of linear combination into logistic function
+logistic(sum(admLR$coefficients*c(1,587,3.39,0,0,0)))
+logistic(sum(admLR$coefficients*c(1,587,3.39,1,0,0)))
+logistic(sum(admLR$coefficients*c(1,587,3.39,0,1,0)))
+logistic(sum(admLR$coefficients*c(1,587,3.39,0,0,1)))
+```
+The result is consistent with the `predict` method provided by R.
+
+###Conduct Chi-square test to see the effect of coefficients.
+
+Null deviance: 499.98  on 399  degrees of freedom
+Residual deviance: 458.52  on 394  degrees of freedom
+
+```{r}
+1 - pchisq(499.98-458.52,df = 399-394)
+```
+The p-vale is very low, so that we can reject the null hypothesis that there is no difference between the null model and fitted model, which means the model is effective. 
+
+###Admission probability as gre and rank vary
+
+create a table that shows how admission probabilities vary at each rank level across gre scores from 200 to 800 (increment gre by 10) while holding gpa at its mean.
+
+```{r}
+table = data.frame( matrix(nrow = 61))
+
+for (k in c(1,2,3,4)) {
+  temp = c()
+  for (i in seq(200, 800, by=10)) {
+  temp = append(temp,predict(admLR, data.frame(gre = i , gpa = 3.39 , rank = factor(k)), type = "response"))
+  }
+  table = cbind(table,temp)
+}
+table[1] = NULL
+names(table ) = c(1,2,3,4)
+row.names(table)  = seq(200, 800, by=10)
+table
+```
+
+##Credit Card Analysis
+Consider a data set of 1000 bank customers. Banks must make decisions regarding whether to approve loans or not. If an applicant is a good credit risk then the cost of not approving a loan is the loss of potentially proﬁtable business to the bank. If the applicant is a bad credit risk, then approving a loan exposes the bank to a signiﬁcant default risk.
+
+The German Credit Data contains data on 20 variables and the classiﬁcation whether an ap- plicant is considered a Good or a Bad credit risk for 1000 loan applicants. Your task is to create a predictive model using this data to help make decisions about whether to approve loans to potential borrowers dependent upon the variables in the data set.
+
+```{r}
+credit = read.csv("GermanCredit.csv")
+##Delete the first index column and add a numeric colomun
+credit = credit %>% 
+  mutate(X = NULL) %>% 
+  mutate(approval = if_else(Class == "Good",1,0))
+```
+
+
+```{r}
+
+trainIndex <- createDataPartition(credit$approval, p=0.6, list=FALSE) 
+creditTraining <- credit[trainIndex, ]
+creditTesting <-credit[-trainIndex, ]
+creditLogistic = glm(approval ~ . - Class , family = binomial, data = creditTraining)
+summary(creditLogistic)
+creditTesting$model_prob <- predict(creditLogistic, creditTesting, type = "response")
+creditTesting = creditTesting %>% 
+  mutate(model_pred = 1*(model_prob > .53) + 0) %>%
+  mutate(accuracy = 1*(model_pred == approval))
+sum(creditTesting$accuracy)/nrow(creditTesting)
+```
+Because too many variables are included in the logistic regression model, we need to conduct stepwise to find the best variable combination. 
+```{r}
+library(MASS)
+step.creditLogistic <- creditLogistic  %>% stepAIC(trace = FALSE)
+AIC(step.creditLogistic)
+summary(step.creditLogistic)
+```
+The AIC of the stepwised model has decreased from 624.52 to 590.38. Now lets find out whether the prediction accuracy has improved.
+
+```{r}
+creditTesting$model_probSW <- predict(step.creditLogistic, creditTesting, type = "response")
+creditTesting = creditTesting %>% 
+  mutate(model_predSW = 1*(model_probSW > .53) + 0) %>%
+  mutate(accuracySW = 1*(model_predSW == approval))
+sum(creditTesting$accuracySW)/nrow(creditTesting)
+```
+The accuracy has increased from 0.77 to 0.7775 after we conducted the step-wise regression.
+

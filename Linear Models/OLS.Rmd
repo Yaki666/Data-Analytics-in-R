@@ -1,0 +1,228 @@
+---
+title: "Linear Model"
+author: "Yaqi"
+date: "4/11/2019"
+output:
+ 
+  pdf_document:
+         latex_engine: xelatex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+#1 Tests for normality
+##1.1 Are body temperatures normally distributed?
+```{r}
+bodytemp = read.csv("/Users/yakili/Downloads/OLS Data/bodytemp.csv")
+attach(bodytemp)
+str(bodytemp)
+```
+1. Create a qqnorm plot
+```{r}
+qqnorm(temp)
+qqline(temp)
+```
+The qqnorm plot shows nearly a straight line, which indicates the temperature distribution is quite normal. 
+```{r}
+shapiro.test(temp)
+```
+The p-value of shapiro test is 0.2332, which is high enough to fail to reject the data is normally distributed. 
+
+#2 T-test
+Conduct a t-test for men and women separately to test the null hypothesis that **temperature is 98.6 degrees Fahrenheit**.
+
+First, we should seperate men's temperature and women's temperature from the dataframe.
+```{r}
+mentemp = bodytemp %>% 
+  filter(bodytemp$sex == 0) %>% select(temp)
+womentemp = bodytemp %>% 
+  filter(bodytemp$sex == 1) %>% select(temp)
+```
+Then, we can conduct a t-test for men to test the null hypothesis that temperature is 98.6 degrees Fahrenheit.
+
+```{r}
+t.test(mentemp, mu = 98.6)
+```
+The p-value of the t-test is 3.084e-07, small enough to reject the null hypothesis that the body temperature of men is equal to 98.6.
+Then, we conduct the t-test for women's body temperature. 
+```{r}
+t.test(womentemp, mu = 98.6)
+```
+The p-value equals 0.02888, which means we fail to reject the null hypothesis, which means women's body temperature is very likely to be 98.6.
+
+Now we can conduct a t-test to test the null hypothesis that men and women have the same body temperature.
+
+```{r}
+t.test(mentemp,womentemp)
+```
+The p-value is 0.02394. We can reject the null hypothesis at 95% confidence level that men's body temperature is the same as women's body temperature.
+
+#3 Eﬀects of gender and heart rate on body temperature
+We can run a linear regression to find the relationship between body temperature and genter, and heart rate.
+```{r}
+linear = lm(temp~sex+bpm)
+lminfo = summary(linear)
+resi = lminfo$residuals
+summary(linear)
+```
+##3.1 
+The intercept of the linear regression is "96.2508140430877" slope for sex is "0.269406", and slope for heart rate is "0.025267"
+##3.2
+The intercept and slope of both the sex and heart rate are signicicant at the confidence interval $\alpha$ = 0.05
+##3.3
+We can plot the residuals out to see whether the it's normally distributed.
+```{r}
+hist(resi,breaks = 40)
+```
+The residuals look normally distributed. 
+##3.4 Shapiro test on the residuals 
+```{r}
+shapiro.test(resi)
+```
+The p-value is 0.52, which is high enough to fail to reject the data is normally distributed. 
+
+#4 New Orleans Airbnb price analysis
+```{r}
+airbnb = read.csv("/Users/yakili/Downloads/OLS Data/NOLAlistingsJune2016_subset2.csv")
+attach(airbnb)
+qqnorm(price)
+hist(price,breaks = 100)
+shapiro.test(price)
+```
+##4.1 Is price normally distributed?
+Apparently, price is not normally distributed. We can transform the price to a more normally distributed data. The histogram of the price indicates that a log tranformation would solve the problem.
+
+```{r}
+price.trans = log(price)
+hist(price.trans)
+qqnorm(price.trans)
+qqline(price.trans)
+shapiro.test(price.trans)
+```
+After the transformation, the qqnorm plot and the shapiro test has shown some improvement on normality. 
+
+##4.2 Create a linear model 
+Now, we can creat an OLS model of price as a function of neighourhood, room type, and availability to make simple predictions.
+
+```{r}
+lm.price = lm(price.trans ~ neighbourhood + room_type + availability_365)
+summary(lm.price)
+```
+##4.3 The interpretation of the model 
+The significant coefficients of the linear regression are Intercept, In the neighborhood variable, Audubon, Central Business District, French Quarterm,Garden District, dMarigny, St. Claude, Touro, Milan, Uptown, West Riverside are significant coefficients to predict the price. room_type of Private room and Shared room, along with availability_365 are significant coefficients.
+
+Check the normality of residuals of the linear regression. 
+```{r}
+ggplot(lm.price,aes(x= lm.price$residuals))  +geom_histogram(bins = 70)
+shapiro.test(lm.price$residuals)
+```
+The residuals seem to be a slightly skewed normal distribution. The shapiro test shows that the residuals are not normally distributed. There is something wrong with the assumptions of the linear regression.
+
+#5 Cooking Procedures
+```{r}
+doe = read.csv("/Users/yakili/Downloads/OLS Data/GBDOE-French Fry DOE.csv")
+str(doe)
+doe = na.omit(doe)
+attach(doe)
+```
+Let's see how these variables are distributed first to meet the normal distribution assumption needed for linear regression.
+
+```{r}
+barplot(table(Cooking.Oil.Type))
+barplot(table(Potato.Type))
+ggplot(doe,aes(x=Cooking.Temp)) + geom_histogram()
+ggplot(doe,aes(x=Cooking.Time)) + geom_histogram()
+```
+It seems that cooking time and cooking temperature are catogorical variables. We should change them into catogorical values. 
+```{r}
+doe$Cooking.Temp = as.ordered(doe$Cooking.Temp)
+doe$Cooking.Time = as.ordered(doe$Cooking.Time)
+
+```
+
+Now we can build a linear model to explain the relationship between taste ratings and other variables. 
+```{r}
+lm.doe = lm(Taste.Rating ~ Cooking.Oil.Type + Cooking.Temp + Cooking.Time + Potato.Type, data = doe)
+summary(lm.doe)
+```
+From the linear regression, only Intercept, Veg of the Cooking oil type, cooking temperature, and cooking time are significant enough to explain the taste rating. The Adjusted R-squared is 0.2316, which means the model only explains only 23% of the taste rating and it is actually not a good model. The model explains 81.64% of the taste ratings. 
+
+##5.2 
+Present the results of the linear regression model. 
+```{r}
+plot(lm.doe)
+```
+The residuals of the linear regression are distributed normally. 
+
+```{r}
+fe = read.csv("/Users/yakili/Downloads/OLS Data/foodenjoyment.csv")
+attach(fe)
+glimpse(fe)
+ggplot(fe, aes(x=Food))+geom_bar()
+ggplot(fe, aes(x=Condiment ))+geom_bar()
+```
+```{r}
+lm.fe = lm(Enjoyment ~ Food + Condiment , data = fe)
+summary(lm.fe)
+plot(lm.fe)
+```
+
+Only the intercept are statistically significant and the model can only explain less than 1 percent of the data, which means this is a pretty bad linear model to see what's driving the enjoyment.
+
+We add an interaction term of food and condiment
+```{r}
+lm.fe.int = lm(Enjoyment ~ Food + Condiment + Food * Condiment, data = fe)
+summary(lm.fe.int)
+plot(lm.fe.int)
+```
+After adding the interaction, the model now can explain 89% of the price now. There are three significant variables: Ice Cream, Mustard, and Mustard Ice Cream. From the fit, Ice Cream and Mustard alone increases the price while an Ice Cream of mustard condiment decreases the price a lot. That's just too much. The distribution of regression residuals shows satisfiable normality.
+
+## Homework time
+Approximately 2 hours.
+
+
+## NYCAirbnb
+
+```{r}
+nyc = read.csv("/Users/yakili/Downloads/OLS Data/NYCairbnb.csv")
+glimpse(nyc)
+```
+Build the linear regression model with several plausible variables to predict the price. Location, room type, minimum nights to stay, number of reviews, and availability can all affect the price. 
+```{r}
+ggplot(nyc, aes(x = availability_365)) +geom_histogram(bins = 100)
+ggplot(nyc, aes(x = neighbourhood_group)) +geom_bar()
+ggplot(nyc, aes(x = minimum_nights)) +geom_histogram(bins = 100) + xlim(c(1,25))
+ggplot(nyc, aes(x = log10(reviews_per_month))) +geom_histogram(bins = 100)
+ggplot(nyc, aes(x = log(number_of_reviews))) +geom_histogram(bins = 100)
+```
+
+
+```{r}
+attach(nyc)
+lm.nyc = lm( price ~ neighbourhood_group + room_type +log10(minimum_nights)+log10(reviews_per_month)+ log(number_of_reviews)+availability_365)
+summary(lm.nyc)
+hist(lm.nyc$residuals)
+```
+The fit model shows neighbourhood_group, pivate room and shared room, as long as minimum nights, reviews, and availability throuth the year has effects on the price. However, the model can only explain 14% of the price and the residuals are not distributted normally. Further data preprocessing and analysis needed.
+
+
+```{r}
+library("glmnet")
+library("mvtnorm")
+nyc$latitude = NULL
+nyc$longitude= NULL
+nyc$last_review= NULL
+nyc = na.omit(nyc)
+x = model.matrix( ~ neighbourhood + neighbourhood_group + room_type + minimum_nights + number_of_reviews + reviews_per_month +calculated_host_listings_count + availability_365 , data = nyc)
+y = nyc %>%
+  select(price) %>%
+  unlist() %>%
+  as.numeric()
+lasso = glmnet(x,y,alpha = 1)
+```
+
+
